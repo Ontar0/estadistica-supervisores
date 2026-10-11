@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#eef1f5" />
+  <title>Estadística de Supervisores</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <h1>Estadística de Supervisores</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="syncBadge" class="sync-badge" hidden></span>
+        <button id="btnTheme" class="icon-btn" type="button" title="Cambiar tema" aria-label="Cambiar tema">🌙</button>
+      </div>
+    </header>
+
+    <main class="sheet">
+      <!-- ============ Datos del parte ============ -->
+      <section class="card">
+        <h2 class="card-title">Datos del parte</h2>
+        <p class="card-sub">Completá los datos del turno.</p>
+        <div class="meta-grid">
+          <label class="field">Fecha
+            <input id="fecha" type="date" />
+          </label>
+          <label class="field">Hora
+            <input id="hora" type="time" />
+          </label>
+          <label class="field">Sector
+            <input id="sector" type="number" inputmode="numeric" min="0" step="1" placeholder="0" />
+          </label>
+          <label class="field">Turno
+            <input id="turno" type="number" inputmode="numeric" min="0" step="1" placeholder="0" />
+          </label>
+          <label class="field">Legajo
+            <input id="legajo" type="number" inputmode="numeric" min="0" step="1" placeholder="0" />
+          </label>
+        </div>
+      </section>
+
+      <!-- ============ Mesas ============ -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Mesas</h2>
+            <p class="card-sub">Ganancia, pérdida y propina (caja de empleados).</p>
+          </div>
+          <button id="btnAddMesa" class="icon-btn icon-btn-accent" type="button">＋ Mesa</button>
+        </div>
+
+        <div class="mesa-head" aria-hidden="true">
+          <span>Mesa</span>
+          <span>Ganancia</span>
+          <span>Pérdida</span>
+          <span>Propina</span>
+          <span></span>
+        </div>
+        <div id="mesas" class="mesas"></div>
+        <p id="mesasEmpty" class="empty" hidden>Agregá al menos una mesa.</p>
+      </section>
+    </main>
+
+    <!-- ============ Panel: totales + acciones ============ -->
+    <aside class="panel">
+      <section class="card">
+        <h2 class="card-title">Totales</h2>
+        <p class="card-sub">Se calculan automáticamente.</p>
+        <div class="totals">
+          <div class="total total-capital" id="capitalWrap">
+            <span class="total-label">Capital</span>
+            <span class="total-value" id="tCapital">0</span>
+          </div>
+          <div class="total total-propina">
+            <span class="total-label">Propina</span>
+            <span class="total-value" id="tPropina">0</span>
+          </div>
+        </div>
+        <div class="totals-sm">
+          <div class="total-sm"><span class="total-sm-label">Ganancia</span><span class="total-sm-value" id="tGanancia">0</span></div>
+          <div class="total-sm"><span class="total-sm-label">Pérdida</span><span class="total-sm-value" id="tPerdida">0</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <label class="field field-notes">Notas (opcional)
+          <textarea id="notas" rows="3" placeholder="Observaciones del parte…"></textarea>
+        </label>
+      </section>
+
+      <div class="panel-actions">
+        <button id="btnClear" class="btn btn-ghost" type="button">Limpiar</button>
+        <button id="btnSave" class="btn btn-primary" type="button">Guardar parte</button>
+      </div>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- ============ Modal de confirmación ============ -->
+  <div id="confirmModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3 id="confirmTitle" class="modal-title">Confirmar</h3>
+      <p id="confirmBody" class="modal-body"></p>
+      <div class="modal-actions">
+        <button id="confirmNo" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="confirmYes" class="btn btn-primary" type="button">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Modal de parte guardado ============ -->
+  <div id="okModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3 class="modal-title">✅ Parte guardado</h3>
+      <div id="okBody" class="modal-body ok-body"></div>
+      <div class="modal-actions">
+        <button data-close class="btn btn-primary" type="button">Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
