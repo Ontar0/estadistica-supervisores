@@ -5,3 +5,6 @@ node_modules/
 # Documentos internos (no publicar)
 DOCUMENTACION.txt
 INFORME-jerarquicos.txt
+
+# PDFs locales (no publicar)
+*.pdf
