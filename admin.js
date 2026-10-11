@@ -1,5 +1,5 @@
 /* =============================================================
-   Estadística de Supervisores 2.0 — Panel de administración
+   Estadística de Supervisores — Panel de administración
    ============================================================= */
 (function () {
   "use strict";

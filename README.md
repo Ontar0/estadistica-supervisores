@@ -1,4 +1,4 @@
-# Estadística de Supervisores 2.0
+# Estadística de Supervisores
 
 Planilla digital para que los supervisores de casino carguen la estadística de mesas
 desde el celular, con totales automáticos, guardado en la nube y un panel de
@@ -51,7 +51,7 @@ contraseña del administrador. Con esos datos se entra a `admin.html`.
 ```bash
 git init
 git add .
-git commit -m "Estadística de Supervisores 2.0"
+git commit -m "Estadística de Supervisores"
 gh repo create estadistica-supervisores --public --source . --push
 ```
 

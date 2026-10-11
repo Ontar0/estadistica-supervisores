@@ -1,5 +1,5 @@
 /* =============================================================
-   Estadística de Supervisores 2.0 — Lógica del supervisor
+   Estadística de Supervisores — Lógica del supervisor
    -------------------------------------------------------------
    - Mesas de cantidad variable.
    - Totales (Capital / Propina) en vivo.

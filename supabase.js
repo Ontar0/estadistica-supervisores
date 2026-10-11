@@ -1,5 +1,5 @@
 /* =============================================================
-   Estadística de Supervisores 2.0 — Cliente mínimo de Supabase
+   Estadística de Supervisores — Cliente mínimo de Supabase
    (REST + Auth, sin librerías externas)
    -------------------------------------------------------------
    - Los supervisores (anon) SOLO pueden INSERTAR partes.

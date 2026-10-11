@@ -1,5 +1,5 @@
 -- =============================================================
--- Estadística de Supervisores 2.0 — Esquema de base de datos
+-- Estadística de Supervisores — Esquema de base de datos
 -- -------------------------------------------------------------
 -- Pegá TODO esto en: Supabase → SQL Editor → New query → Run
 -- =============================================================

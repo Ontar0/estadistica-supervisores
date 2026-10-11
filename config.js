@@ -1,5 +1,5 @@
 /* =============================================================
-   Estadística de Supervisores 2.0 — Configuración
+   Estadística de Supervisores — Configuración
    -------------------------------------------------------------
    Estos valores apuntan al proyecto de Supabase.
    La clave "publishable/anon" es PÚBLICA: puede estar en el frontend.
