@@ -188,6 +188,18 @@ body.dark .sync-badge { color: #fde68a; background: #422006; }
 .mesa-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
 .mesa-input::-webkit-outer-spin-button,
 .mesa-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.mesa-input.input-err,
+.mesa-input.input-err:focus {
+  border-color: var(--danger);
+  outline-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+.form-error {
+  margin: 10px 2px 0;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--danger);
+}
 
 .row-del {
   border: 1px solid var(--border);

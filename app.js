@@ -64,20 +64,67 @@
     return Number.isFinite(x) ? Math.round(x) : null;
   }
 
+  /* ---------- Formato de importes (separador de miles) ---------- */
+  function digitsOnly(v) {
+    return String(v).replace(/\D/g, "");
+  }
+  function trimLeadingZeros(d) {
+    return d.replace(/^0+(?=\d)/, "");
+  }
+  function fmtThousands(digits) {
+    const d = trimLeadingZeros(digitsOnly(digits));
+    if (!d) return "";
+    return d.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+  function keepCaretEnd(input) {
+    if (document.activeElement === input) {
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* no-op */ }
+    }
+  }
+  function formatMoneyInput(input, allowNegative) {
+    const v = String(input.value || "").trim();
+    const neg = allowNegative && v.startsWith("-");
+    const d = trimLeadingZeros(digitsOnly(v)).slice(0, 12);
+    input.value = (neg ? "-" : "") + fmtThousands(d);
+    keepCaretEnd(input);
+  }
+  function moneyOf(input) {
+    const v = String(input.value || "").trim();
+    if (v === "" || v === "-") return 0;
+    const neg = v.startsWith("-");
+    const d = digitsOnly(v);
+    if (!d) return 0;
+    const n = parseInt(d, 10);
+    return Number.isFinite(n) ? (neg ? -n : n) : 0;
+  }
+
   /* ---------- Mesas (el DOM es la fuente de verdad) ---------- */
   const mesasEl = $("#mesas");
 
   function makeInput(field, label, value, extraClass) {
     const input = document.createElement("input");
-    input.type = "number";
-    input.inputMode = "numeric";
-    input.min = "0";
-    input.step = "1";
     input.className = "mesa-input" + (extraClass ? " " + extraClass : "");
     input.setAttribute("data-field", field);
     input.setAttribute("aria-label", label);
+    if (field === "n") {
+      input.type = "number";
+      input.inputMode = "numeric";
+      input.min = "0";
+      input.step = "1";
+      input.placeholder = "0";
+      if (value !== undefined && value !== null && value !== "") input.value = value;
+      return input;
+    }
+    // Importes: campo de texto con separador de miles (teclado numérico).
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.autocomplete = "off";
+    input.maxLength = 16;
     input.placeholder = "0";
-    if (value !== undefined && value !== null && value !== "") input.value = value;
+    const raw = value === undefined || value === null ? "" : String(value).trim();
+    const allowNeg = field === "propina";
+    const neg = allowNeg && raw.startsWith("-");
+    input.value = (neg ? "-" : "") + fmtThousands(raw).slice(0, 16);
     return input;
   }
 
@@ -122,9 +169,9 @@
       const n = parseInt(get("n").value, 10);
       return {
         n: Number.isFinite(n) && n > 0 ? n : i + 1,
-        ganancia: num(get("ganancia").value),
-        perdida: num(get("perdida").value),
-        propina: num(get("propina").value)
+        ganancia: moneyOf(get("ganancia")),
+        perdida: moneyOf(get("perdida")),
+        propina: moneyOf(get("propina"))
       };
     });
   }
@@ -138,16 +185,44 @@
 
   function hasNegative() {
     return rowList().some((row) =>
-      ["ganancia", "perdida", "propina"].some((f) => {
-        const v = row.querySelector(`[data-field="${f}"]`).value;
-        return v !== "" && Number(v) < 0;
-      })
+      ["ganancia", "perdida", "propina"].some((f) => moneyOf(row.querySelector(`[data-field="${f}"]`)) < 0)
     );
+  }
+
+  /* Verificación en vivo de la caja de empleados (propina) */
+  function negativePropinaRows() {
+    const out = [];
+    rowList().forEach((row, idx) => {
+      if (moneyOf(row.querySelector('[data-field="propina"]')) < 0) out.push({ row, idx: idx + 1 });
+    });
+    return out;
+  }
+
+  function updateMoneyErrors() {
+    rowList().forEach((row) => {
+      const input = row.querySelector('[data-field="propina"]');
+      const neg = moneyOf(input) < 0;
+      input.classList.toggle("input-err", neg);
+      if (neg) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    });
+    const list = negativePropinaRows().map((x) => x.idx);
+    const msgEl = $("#mesasError");
+    if (!msgEl) return;
+    if (list.length === 1) {
+      msgEl.textContent = "Mesa " + list[0] + " · Caja de empleados: el importe no puede ser negativo.";
+    } else if (list.length > 1) {
+      msgEl.textContent = "Mesas " + list.join(", ") + " · Caja de empleados: los importes no pueden ser negativos.";
+    } else {
+      msgEl.textContent = "";
+    }
+    msgEl.hidden = list.length === 0;
   }
 
   function afterRowsChange() {
     $("#mesasEmpty").hidden = rowList().length > 0;
     renderTotals();
+    updateMoneyErrors();
     saveDraft();
   }
 
@@ -226,6 +301,15 @@
     if (legajo === null || legajo < 0) return { msg: "Completá el Legajo.", sel: "#legajo" };
 
     if (!rowList().length) return { msg: "Agregá al menos una mesa." };
+
+    // Verificación de la caja de empleados (propina): no puede ser negativa.
+    const bad = negativePropinaRows();
+    if (bad.length) {
+      updateMoneyErrors();
+      const input = bad[0].row.querySelector('[data-field="propina"]');
+      return { msg: `Mesa ${bad[0].idx} · Caja de empleados: el importe no puede ser negativo.`, sel: input };
+    }
+
     if (hasNegative()) return { msg: "Los importes no pueden ser negativos." };
 
     const rows = readRows();
@@ -271,7 +355,10 @@
     const err = validate();
     if (err) {
       toast(err.msg, "warn");
-      if (err.sel) $(err.sel).focus();
+      if (err.sel) {
+        if (typeof err.sel === "string") { const el = $(err.sel); if (el) el.focus(); }
+        else err.sel.focus();
+      }
       return;
     }
 
@@ -445,8 +532,14 @@
     $("#btnClear").addEventListener("click", clearForm);
     $("#btnTheme").addEventListener("click", toggleTheme);
 
-    mesasEl.addEventListener("input", () => {
+    mesasEl.addEventListener("input", (e) => {
+      const t = e.target;
+      if (t && t.classList && t.classList.contains("mesa-input")) {
+        const field = t.getAttribute("data-field");
+        if (field && field !== "n") formatMoneyInput(t, field === "propina");
+      }
       renderTotals();
+      updateMoneyErrors();
       saveDraft();
     });
 
