@@ -53,6 +53,26 @@
     return Number.isFinite(x) ? x : 0;
   }
 
+  /* ---------- Fecha de actividad (corte fijo 06:00) ---------- */
+  function computeActivityDate(reportDateStr, timeStr) {
+    if (!reportDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(reportDateStr)) {
+      return reportDateStr || "";
+    }
+    const t = (timeStr || "").trim();
+    const hh = parseInt(t.slice(0, 2), 10);
+    const hasValidHour = !Number.isNaN(hh);
+    if (!hasValidHour || hh < 6) {
+      const d = new Date(reportDateStr + "T00:00:00");
+      d.setDate(d.getDate() - 1);
+      return (
+        d.getFullYear() +
+        "-" + String(d.getMonth() + 1).padStart(2, "0") +
+        "-" + String(d.getDate()).padStart(2, "0")
+      );
+    }
+    return reportDateStr;
+  }
+
   function fmt(n) {
     return num(n).toLocaleString("es-AR", { maximumFractionDigits: 2 });
   }
@@ -248,12 +268,21 @@
     wrap.classList.toggle("neg", t.capital < 0);
   }
 
+  function syncActivityDate() {
+    const activityEl = $("#activityDate");
+    if (!activityEl) return;
+    const fecha = $("#fecha").value;
+    const hora = $("#hora").value;
+    activityEl.value = computeActivityDate(fecha, hora);
+  }
+
   /* ---------- Borrador (para no perder datos al recargar) ---------- */
   function saveDraft() {
     try {
       const draft = {
         fecha: $("#fecha").value,
         hora: $("#hora").value,
+        activity_date: $("#activityDate") ? $("#activityDate").value : undefined,
         sector: $("#sector").value,
         turno: $("#turno").value,
         legajo: $("#legajo").value,
@@ -280,6 +309,12 @@
     if (!d || typeof d !== "object") return false;
     if (d.fecha) $("#fecha").value = d.fecha;
     if (d.hora) $("#hora").value = d.hora;
+    if (d.activity_date !== undefined) {
+      const act = $("#activityDate");
+      if (act) act.value = d.activity_date;
+    } else {
+      syncActivityDate();
+    }
     if (d.sector !== undefined) $("#sector").value = d.sector;
     if (d.turno !== undefined) $("#turno").value = d.turno;
     if (d.legajo !== undefined) $("#legajo").value = d.legajo;
@@ -334,9 +369,17 @@
     const list = payloadRows();
     const t = totalsOf(list);
     const hora = ($("#hora").value || nowTime()).slice(0, 5);
+    const reportDate = $("#fecha").value || todayDate();
+    const horaFull = $("#hora").value || nowTime();
+    const activityDate = (function() {
+      const act = $("#activityDate");
+      if (act && act.value) return act.value;
+      return computeActivityDate(reportDate, horaFull);
+    })();
     return {
-      report_date: $("#fecha").value || todayDate(),
+      report_date: reportDate,
       hora: hora + ":00",
+      activity_date: activityDate,
       sector: intVal("#sector"),
       turno: intVal("#turno"),
       legajo: intVal("#legajo"),
@@ -385,6 +428,7 @@
     $("#notas").value = "";
     clearMesas();
     addMesa();
+    syncActivityDate();
     saveDraft();
   }
 
@@ -405,6 +449,8 @@
     clearDraft();
     $("#fecha").value = todayDate();
     $("#hora").value = nowTime();
+    const act = $("#activityDate");
+    if (act) act.value = computeActivityDate(todayDate(), nowTime());
     $("#sector").value = "";
     $("#turno").value = "";
     $("#legajo").value = "";
@@ -543,8 +589,11 @@
       saveDraft();
     });
 
-    ["#fecha", "#hora", "#sector", "#turno", "#legajo", "#notas"].forEach((sel) =>
-      $(sel).addEventListener("input", saveDraft)
+    ["#fecha", "#hora", "#activityDate", "#sector", "#turno", "#legajo", "#notas"].forEach((sel) =>
+      $(sel).addEventListener("input", () => {
+        if (sel === "#fecha" || sel === "#hora") syncActivityDate();
+        saveDraft();
+      })
     );
 
     $("#confirmYes").addEventListener("click", () => closeConfirm(true));
@@ -571,12 +620,18 @@
 
     $("#fecha").value = todayDate();
     $("#hora").value = nowTime();
+    const actInit = $("#activityDate");
+    if (actInit) actInit.value = computeActivityDate(todayDate(), nowTime());
 
     const restored = loadDraft();
     if (!restored) {
       $("#fecha").value = todayDate();
       $("#hora").value = nowTime();
+      const act = $("#activityDate");
+      if (act) act.value = computeActivityDate(todayDate(), nowTime());
       addMesa();
+    } else {
+      syncActivityDate();
     }
 
     renderTotals();

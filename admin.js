@@ -151,10 +151,14 @@
     renderAggTable("#legajoTable", aggregate(rows, (r) => "Legajo " + (r.legajo ?? "—")), "Legajo");
     renderAggTable(
       "#dayTable",
-      aggregate(rows, (r) => r.report_date || "—").sort((a, b) => (a.key < b.key ? 1 : -1)),
-      "Fecha"
+      aggregate(rows, (r) => actDate(r)).sort((a, b) => (a.key < b.key ? 1 : -1)),
+      "Fecha actividad"
     );
     renderReports(rows);
+  }
+
+  function actDate(r) {
+    return r && r.activity_date ? r.activity_date : (r && r.report_date ? r.report_date : "—");
   }
 
   function kpi(label, value, sub, cls) {
@@ -168,7 +172,7 @@
   function renderKpis(rows) {
     const t = totalsOf(rows);
     const supervisores = new Set(rows.map((r) => r.legajo)).size;
-    const dias = new Set(rows.map((r) => r.report_date)).size;
+    const dias = new Set(rows.map((r) => actDate(r))).size;
     $("#kpis").innerHTML = [
       kpi("Partes", t.partes),
       kpi("Capital", money(t.capital), "Ganancia − Pérdida", moneyClass(t.capital)),
@@ -184,7 +188,8 @@
   function renderDayBars(rows) {
     const map = new Map();
     for (const r of rows) {
-      const k = r.report_date || "—";
+      const k = actDate(r);
+      if (k === "—") continue;
       map.set(k, (map.get(k) || 0) + 1);
     }
     const list = Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(-14);
@@ -229,9 +234,9 @@
   function renderReports(rows) {
     const list = rows.slice(0, 500);
     let html =
-      "<thead><tr><th></th><th>Fecha</th><th>Hora</th><th class='num'>Sector</th><th class='num'>Turno</th><th class='num'>Legajo</th><th class='num'>Ganancia</th><th class='num'>Pérdida</th><th class='num'>Capital</th><th class='num'>Propina</th></tr></thead><tbody>";
+      "<thead><tr><th></th><th>Fecha actividad</th><th>Fecha</th><th>Hora carga</th><th class='num'>Sector</th><th class='num'>Turno</th><th class='num'>Legajo</th><th class='num'>Ganancia</th><th class='num'>Pérdida</th><th class='num'>Capital</th><th class='num'>Propina</th></tr></thead><tbody>";
     if (!list.length) {
-      html += '<tr><td colspan="10" class="empty">Sin datos todavía.</td></tr>';
+      html += '<tr><td colspan="11" class="empty">Sin datos todavía.</td></tr>';
     } else {
       list.forEach((r, i) => {
         const mesas = normalizeMesas(r);
@@ -241,6 +246,7 @@
         const notas = r.notas ? `<div class="detail-notes">Notas: ${escapeHtml(r.notas)}</div>` : "";
         html += `<tr>
           <td><button class="js-toggle" type="button" data-target="det-${i}" aria-label="Ver detalle">▶</button></td>
+          <td>${escapeHtml(actDate(r))}</td>
           <td>${escapeHtml(r.report_date || "—")}</td>
           <td>${escapeHtml(horaShort(r.hora))}</td>
           <td class="num">${escapeHtml(r.sector)}</td>
@@ -252,7 +258,7 @@
           <td class="num">${money(r.total_propina)}</td>
         </tr>
         <tr class="detail-row" id="det-${i}" hidden>
-          <td colspan="10"><div class="detail-inner">${chips}${notas}
+          <td colspan="11"><div class="detail-inner">${chips}${notas}
             <div class="detail-notes">Cargado: ${escapeHtml(fmtStamp(r.created_at))} · Dispositivo ${escapeHtml(shortId(r.device_id))}</div>
           </div></td>
         </tr>`;
@@ -269,7 +275,7 @@
   }
   function exportCsv() {
     const header = [
-      "report_date", "hora", "sector", "turno", "legajo",
+      "fecha_actividad", "report_date", "hora_carga", "sector", "turno", "legajo",
       "total_ganancia", "total_perdida", "total_capital", "total_propina",
       "mesas", "notas", "created_at", "device_id"
     ];
@@ -280,6 +286,7 @@
         .join(" | ");
       lines.push(
         [
+          actDate(r) || "",
           r.report_date || "",
           horaShort(r.hora),
           r.sector ?? "",
@@ -345,7 +352,21 @@
           throw e;
         }
       }
-      render(Array.isArray(rows) ? rows : []);
+      // Fallback por activity_date si se aplica filtro desde UI (solo filtro local como antes, pero tratamos)
+      let out = Array.isArray(rows) ? rows : [];
+      // Aplicar filtros locales por activity_date si hay valores
+      const fromAct = $("#fFrom").value;
+      const toAct = $("#fTo").value;
+      if (fromAct || toAct) {
+        out = out.filter((r) => {
+          const ad = actDate(r);
+          if (ad === "—") return false;
+          if (fromAct && ad < fromAct) return false;
+          if (toAct && ad > toAct) return false;
+          return true;
+        });
+      }
+      render(out);
       if (!rows.length) toast("No hay partes para esos filtros.");
     } catch (e) {
       toast("Error al cargar: " + e.message, "warn");
