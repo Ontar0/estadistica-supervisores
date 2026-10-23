@@ -9,6 +9,7 @@ create table if not exists public.reports (
   created_at     timestamptz not null default now(),   -- hora real del servidor
   report_date    date        not null default current_date,
   hora           time        not null default localtime,
+  activity_date  date,                                   -- fecha de actividad (corte 06:00)
   sector         int         not null,
   turno          int         not null,
   legajo         int         not null,

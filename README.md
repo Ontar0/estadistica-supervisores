@@ -35,6 +35,10 @@ La cantidad de mesas es **variable**: se agregan y quitan filas.
 1. Entrá a tu proyecto de Supabase → **SQL Editor** → **New query**.
 2. Pegá **todo** el contenido de [`schema.sql`](schema.sql) y ejecutalo (**Run**).
 
+Si la tabla ya existía antes de la columna `activity_date`, ejecutá también
+[`migrations/001-activity-date.sql`](migrations/001-activity-date.sql). Sin eso,
+los INSERT fallan con `PGRST204` y los partes quedan en el buzón de salida.
+
 ### 2. Configurar la conexión
 
 Editá [`config.js`](config.js) con la URL y la clave *publishable/anon* de tu
@@ -73,5 +77,9 @@ schema.sql    Tabla + políticas RLS
 ## Notas
 
 - Si no hay conexión, los partes quedan en una cola local y se reintentan al
-  reconectar (el badge de la barra superior muestra los pendientes).
+  reconectar, al volver a la pestaña y con backoff (el badge de la barra
+  superior muestra los pendientes; se puede tocar para reintentar).
+- Si un parte no se puede subir por un error del servidor (por ejemplo, falta
+  una columna), queda marcado como "con error", se muestra el mensaje real y
+  no se reintenta en loop.
 - La planilla guarda un borrador local para no perder datos si se recarga la página.

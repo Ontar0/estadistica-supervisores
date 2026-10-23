@@ -377,6 +377,7 @@
       return computeActivityDate(reportDate, horaFull);
     })();
     return {
+      id: uuid(),
       report_date: reportDate,
       hora: hora + ":00",
       activity_date: activityDate,
@@ -413,7 +414,13 @@
     if (!ok) return;
 
     const list = outboxGet();
-    list.push(payload);
+    list.push({
+      id: payload.id || uuid(),
+      payload: payload,
+      attempts: 0,
+      lastError: null,
+      status: "pending"
+    });
     outboxSet(list);
 
     clearDraft();
@@ -462,55 +469,171 @@
   }
 
   /* ---------- Cola de subida (outbox) ---------- */
+  // Cada ítem: { id, payload, attempts, lastError, status: "pending" | "failed" }.
+  // El id viaja como PK del parte: reintentar es idempotente (un 409 = ya subido).
+  const RETRY_BASE_MS = 15000;
+  const RETRY_MAX_MS = 5 * 60 * 1000;
+  let flushing = false;
+  let flushAgain = false;
+  let retryTimer = null;
+
   function outboxGet() {
+    let raw;
     try {
-      return JSON.parse(localStorage.getItem(KEY_OUTBOX)) || [];
+      raw = JSON.parse(localStorage.getItem(KEY_OUTBOX)) || [];
     } catch (e) {
       return [];
     }
+    if (!Array.isArray(raw)) return [];
+    // Migra entradas viejas (payload suelto) y les fija un id estable.
+    let migrated = false;
+    const list = raw.map((entry) => {
+      if (entry && entry.payload) return entry;
+      migrated = true;
+      const payload = entry || {};
+      return {
+        id: payload.id || uuid(),
+        payload: payload,
+        attempts: 0,
+        lastError: null,
+        status: "pending"
+      };
+    });
+    if (migrated) {
+      try {
+        localStorage.setItem(KEY_OUTBOX, JSON.stringify(list));
+      } catch (e) {
+        /* sin espacio: seguimos con la copia en memoria */
+      }
+    }
+    return list;
   }
+
   function outboxSet(v) {
     localStorage.setItem(KEY_OUTBOX, JSON.stringify(v));
     updateSyncBadge();
   }
 
-  async function flushOutbox() {
-    const list = outboxGet();
-    if (!list.length) {
-      updateSyncBadge();
+  // Un error sin status HTTP es de red/timeout (fetch rechazó o abortamos).
+  function isTransient(e) {
+    return !e || !e.status || e.status >= 500 || e.status === 429;
+  }
+
+  function errMsg(e) {
+    if (!e || !e.status) return "Sin conexión";
+    return e.message || `Error ${e.status}`;
+  }
+
+  async function flushOutbox(opts) {
+    const o = opts || {};
+    if (flushing) {
+      flushAgain = true;
       return;
     }
     if (!window.SUPAPI || !SUPAPI.enabled()) {
       updateSyncBadge();
       return;
     }
-    const remaining = [];
-    for (const item of list) {
-      try {
-        await SUPAPI.insertReport(item);
-      } catch (e) {
-        remaining.push(item);
-      }
+
+    let sent = 0;
+    let transient = false;
+    let failedNow = 0;
+    let lastError = null;
+
+    flushing = true;
+    try {
+      do {
+        flushAgain = false;
+        const list = outboxGet();
+        if (!list.length) break;
+
+        const remaining = [];
+        for (const item of list) {
+          // Un fallo permanente no se reintenta en loop: solo al abrir la app
+          // o con un reintento manual.
+          if (item.status === "failed" && !o.retryFailed) {
+            remaining.push(item);
+            continue;
+          }
+
+          try {
+            const payload = Object.assign({}, item.payload, { id: item.id });
+            await SUPAPI.insertReport(payload, { timeout: 15000 });
+            sent++;
+          } catch (e) {
+            if (e && e.status === 409) {
+              // Clave duplicada: el parte ya estaba en la nube.
+              sent++;
+              continue;
+            }
+            item.attempts = (item.attempts || 0) + 1;
+            item.lastError = errMsg(e);
+            if (isTransient(e)) {
+              item.status = "pending";
+              transient = true;
+            } else {
+              item.status = "failed";
+              failedNow++;
+              lastError = item.lastError;
+            }
+            remaining.push(item);
+          }
+        }
+        outboxSet(remaining);
+      } while (flushAgain);
+    } finally {
+      flushing = false;
     }
-    outboxSet(remaining);
-    if (!remaining.length) toast("Parte sincronizado con la nube.");
-    else toast("Sin conexión: se reintentará automáticamente.", "warn");
+
+    if (failedNow) {
+      const n = failedNow === 1 ? "1 parte" : `${failedNow} partes`;
+      toast(`No se pudo subir ${n}: ${lastError || "error del servidor"}.`, "warn");
+    } else if (sent && !transient) {
+      toast(sent === 1 ? "Parte sincronizado con la nube." : `${sent} partes sincronizados con la nube.`);
+    } else if (transient) {
+      toast("Sin conexión: se reintentará automáticamente.", "warn");
+    }
+
+    scheduleRetry(transient);
+  }
+
+  function scheduleRetry(needed) {
+    clearTimeout(retryTimer);
+    if (!needed) return;
+    const pending = outboxGet().filter((it) => it.status !== "failed");
+    if (!pending.length) return;
+    const attempts = Math.max.apply(
+      null,
+      pending.map((it) => it.attempts || 0).concat([0])
+    );
+    const delay = Math.min(
+      RETRY_BASE_MS * Math.pow(2, Math.max(0, attempts - 1)),
+      RETRY_MAX_MS
+    );
+    retryTimer = setTimeout(() => flushOutbox(), delay);
   }
 
   function updateSyncBadge() {
     const badge = $("#syncBadge");
     if (!badge) return;
-    const n = outboxGet().length;
+    const list = outboxGet();
+    const n = list.length;
     if (!n) {
       badge.hidden = true;
       return;
     }
+    const failed = list.filter((it) => it.status === "failed").length;
     badge.hidden = false;
-    badge.textContent = n === 1 ? "1 parte pendiente" : `${n} partes pendientes`;
+    badge.textContent =
+      (n === 1 ? "1 parte pendiente" : `${n} partes pendientes`) +
+      (failed ? ` · ${failed} con error` : "");
+    const last = list[list.length - 1];
     badge.title =
-      window.SUPAPI && SUPAPI.enabled()
+      (window.SUPAPI && SUPAPI.enabled()
         ? "Partes por subir a la nube"
-        : "Nube no configurada: se guardan localmente";
+        : "Nube no configurada: se guardan localmente") +
+      (last && last.lastError ? ` · Último error: ${last.lastError}` : "") +
+      " · Clic para reintentar";
   }
 
   /* ---------- Modales ---------- */
@@ -610,7 +733,16 @@
       btn.addEventListener("click", () => closeModal("#" + btn.closest(".modal").id));
     });
 
-    window.addEventListener("online", flushOutbox);
+    window.addEventListener("online", () => flushOutbox());
+    window.addEventListener("focus", () => flushOutbox());
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) flushOutbox();
+    });
+
+    const badge = $("#syncBadge");
+    if (badge) {
+      badge.addEventListener("click", () => flushOutbox({ retryFailed: true }));
+    }
   }
 
   /* ---------- Init ---------- */
@@ -637,7 +769,7 @@
     renderTotals();
     updateSyncBadge();
     wireEvents();
-    flushOutbox();
+    flushOutbox({ retryFailed: true });
   }
 
   if (document.readyState === "loading") {

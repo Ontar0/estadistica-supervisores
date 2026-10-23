@@ -41,6 +41,7 @@
         `Error ${res.status}`;
       const err = new Error(msg);
       err.status = res.status;
+      err.code = data && data.code;
       err.data = data;
       throw err;
     }
@@ -48,17 +49,25 @@
   }
 
   /* ---------- Escritura (supervisor / anónimo) ---------- */
-  async function insertReport(payload) {
+  async function insertReport(payload, opts) {
     if (!enabled()) throw new Error("Supabase no está configurado.");
-    const res = await fetch(`${base}/rest/v1/${table}`, {
-      method: "POST",
-      headers: headers({
-        Authorization: `Bearer ${anon}`,
-        Prefer: "return=minimal"
-      }),
-      body: JSON.stringify(payload)
-    });
-    return parse(res);
+    const o = opts || {};
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), o.timeout || 15000) : null;
+    try {
+      const res = await fetch(`${base}/rest/v1/${table}`, {
+        method: "POST",
+        headers: headers({
+          Authorization: `Bearer ${anon}`,
+          Prefer: "return=minimal"
+        }),
+        body: JSON.stringify(payload),
+        signal: ctrl ? ctrl.signal : undefined
+      });
+      return parse(res);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /* ---------- Lectura (admin autenticado) ---------- */
